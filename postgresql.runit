@@ -6,15 +6,9 @@ PG_CONFDIR="/etc/postgresql/${PG_VERSION}/main"
 PG_BINDIR="/usr/lib/postgresql/${PG_VERSION}/bin"
 PG_DATADIR="${PG_HOME}/${PG_VERSION}/main"
 
-# set this env variable to true to enable a line in the
-# pg_hba.conf file to trust samenet.  this can be used to connect
-# from other containers on the same host without authentication
-PSQL_TRUST_LOCALNET=${PSQL_TRUST_LOCALNET:false}
-
 DB_NAME=${DB_NAME:-}
 DB_USER=${DB_USER:-}
 DB_PASS=${DB_PASS:-}
-DB_UNACCENT=${DB_UNACCENT:false}
 
 # fix permissions and ownership of ${PG_HOME}
 mkdir -p -m 0700 ${PG_HOME}
@@ -24,26 +18,6 @@ chown -R postgres:postgres ${PG_HOME}
 mkdir -p -m 0755 /run/postgresql /run/postgresql/${PG_VERSION}-main.pg_stat_tmp
 chown -R postgres:postgres /run/postgresql
 chmod g+s /run/postgresql
-
-# disable ssl
-sed 's/ssl = true/#ssl = true/' -i ${PG_CONFDIR}/postgresql.conf
-
-# listen on all interfaces
-cat >> ${PG_CONFDIR}/postgresql.conf <<EOF
-listen_addresses = '*'
-EOF
-
-if [ "${PSQL_TRUST_LOCALNET}" == "true" ]; then
-  echo "Enabling trust samenet in pg_hba.conf..."
-  cat >> ${PG_CONFDIR}/pg_hba.conf <<EOF
-host    all             all             samenet                 trust
-EOF
-fi
-
-# allow remote connections to postgresql database
-cat >> ${PG_CONFDIR}/pg_hba.conf <<EOF
-host    all             all             0.0.0.0/0               md5
-EOF
 
 cd ${PG_HOME}
 
@@ -103,13 +77,6 @@ if [ -n "${DB_NAME}" ]; then
     echo "CREATE DATABASE ${db};" | \
       sudo -u postgres -H ${PG_BINDIR}/postgres --single \
         -D ${PG_DATADIR} -c config_file=${PG_CONFDIR}/postgresql.conf >/dev/null
-
-    if [ "${DB_UNACCENT}" == "true" ]; then
-      echo "Installing unaccent extension..."
-      echo "CREATE EXTENSION IF NOT EXISTS unaccent;" | \
-        sudo -u postgres -H ${PG_BINDIR}/postgres --single ${db} \
-          -D ${PG_DATADIR} -c config_file=${PG_CONFDIR}/postgresql.conf >/dev/null
-    fi
 
     if [ -n "${DB_USER}" ]; then
       echo "Granting access to database \"${db}\" for user \"${DB_USER}\"..."
